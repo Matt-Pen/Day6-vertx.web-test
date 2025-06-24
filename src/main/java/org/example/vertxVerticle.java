@@ -1,21 +1,37 @@
 package org.example;
 
 
+import com.mongodb.ClientSessionOptions;
+import com.mongodb.client.*;
+import com.mongodb.client.internal.MongoClientImpl;
+import com.mongodb.connection.ClusterDescription;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Promise;
 import io.vertx.core.Vertx;
 import io.vertx.core.http.HttpServer;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
-import io.vertx.ext.mongo.MongoClient;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.handler.BodyHandler;
+import org.bson.Document;
+import org.bson.conversions.Bson;
 
 import java.util.ArrayList;
 import java.util.List;
 
 public class vertxVerticle extends AbstractVerticle {
+
+    private MongoClient mongoClient;
+    private MongoDatabase mongoDatabase;
+    public vertxVerticle(){
+        String connectionString = "mongodb://admin:admin@172.21.17.53:27017,172.21.17.54:27017,172.21.17.92:27017/";
+        MongoClient mongoClient = MongoClients.create(connectionString);
+        MongoDatabase database = mongoClient.getDatabase("CompanyMatt");
+        MongoCollection<Document> booksCollection = database.getCollection("Employee");
+    }
+
+
 //
 //    private static final List<JsonObject> students = new ArrayList<>();
 //
@@ -77,41 +93,47 @@ public class vertxVerticle extends AbstractVerticle {
 //                .end(response.encodePrettily());
 //    }
 //
-//    @Override
-//    public void stop(Promise<Void> stopPromise) {
-//        System.out.println("Server stopping...");
-//        stopPromise.complete();
-//    }
+    @Override
+    public void stop(Promise<Void> stopPromise) {
+        System.out.println("Server stopping...");
+        stopPromise.complete();
+    }
 
-    public void start(Promise<Void> startPromise){
+    public void start(Promise<Void> startPromise) {
         HttpServer server = vertx.createHttpServer();
         Vertx vertx = Vertx.vertx();
+        String connectionString = "mongodb://admin:admin@172.21.17.53:27017,172.21.17.54:27017,172.21.17.92:27017/";
+        MongoClient mongoClient = MongoClients.create(connectionString);
+        MongoDatabase database = mongoClient.getDatabase("CompanyMatt");
+        MongoCollection<Document> booksCollection = database.getCollection("Employee");
 
-        // MongoDB configuration
-        JsonObject mongoConfig = new JsonObject()
-                .put("connection_string", "mongodb://admin:admin@172.21.17.53:27017,172.21.17.54:27017,172.21.17.92:27017/")
-                .put("db_name", "CompanyMatt");
-        MongoClient mongoClient = MongoClient.createShared(vertx, mongoConfig);
+//        JsonObject mongoConfig = new JsonObject()
+//                .put("connection_string", "mongodb://admin:admin@172.21.17.53:27017,172.21.17.54:27017,172.21.17.92:27017/")
+//                .put("db_name", "CompanyMatt");
+
+
         Router router = Router.router(vertx);
         router.route().handler(BodyHandler.create());
 
         router.get("/employee").handler(ctx -> {
+//                Document doc1=booksCollection.find();
+            JsonArray jarr = new JsonArray();
+            for (Document doc : booksCollection.find()) {
+                jarr.add(new JsonObject(doc.toJson()));
 
-            mongoClient.find("Employee", new JsonObject(), res -> {
-                if (res.succeeded()) {
-                    ctx.response()
-                            .putHeader("Content", "application/json")
-                            .end(res.result().toString());
-                } else {
-                    ctx.response()
-                            .setStatusCode(500)
-                            .putHeader("Content", "application/json")
-                            .end(new JsonObject()
-                                    .put("error", res.cause().getMessage())
-                                    .encode());
-                }
-            });
+            }
+            if (jarr.isEmpty()) {
+                ctx.response()
+                        .setStatusCode(500)
+                        .putHeader("Content", "application/json")
+                        .end("Doc returned as NULL.");
+            } else {
+                ctx.response().putHeader("Content", "application/json").end(jarr.encodePrettily());
+
+            }
         });
+
+
         router.post("/employee").handler(ctx -> {
             JsonObject employee = ctx.getBodyAsJson();
 
@@ -129,28 +151,35 @@ public class vertxVerticle extends AbstractVerticle {
                         .end(new JsonObject()
                                 .put("error", "'EMP id', 'name', 'Email', 'Skills', 'Department', and 'Joining date' are required")
                                 .encode());
-                return;
+
+            }
+            else{
+                booksCollection.insertOne(Document.parse(employee.encode()));
+                ctx.response().end("Values Inserted");
             }
 
-            mongoClient.insert("Employee", employee, res1 -> {
-                if (res1.succeeded()) {
-                    ctx.response()
-                            .setStatusCode(201)
-                            .putHeader("Content", "application/json")
-                            .end(new JsonObject()
-                                    .put("message", "Employee added successfully")
-                                    .put("id", res1.result())
-                                    .encode());
-                } else {
-                    ctx.response()
-                            .setStatusCode(500)
-                            .putHeader("Content", "application/json")
-                            .end(new JsonObject()
-                                    .put("error", res1.cause().getMessage())
-                                    .encode());
-                }
-            });
         });
+
+//            mongoClient.insert("Employee", employee, res1 -> {
+//                if (res1.succeeded()) {
+//                    ctx.response()
+//                            .setStatusCode(201)
+//                            .putHeader("Content", "application/json")
+//                            .end(new JsonObject()
+//                                    .put("message", "Employee added successfully")
+//                                    .put("id", res1.result())
+//                                    .encode());
+//                } else {
+//                    ctx.response()
+//                            .setStatusCode(500)
+//                            .putHeader("Content", "application/json")
+//                            .end(new JsonObject()
+//                                    .put("error", res1.cause().getMessage())
+//                                    .encode());
+//                }
+//            });
+//        });
+
 
         // Start HTTP server on port 8080
         vertx.createHttpServer()
@@ -165,4 +194,6 @@ public class vertxVerticle extends AbstractVerticle {
 
 
     }
+//            server.listen(8080).toCompletionStage().toCompletableFuture();
 }
+
